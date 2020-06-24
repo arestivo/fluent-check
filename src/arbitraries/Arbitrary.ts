@@ -1,28 +1,13 @@
 import { ArbitrarySize, FluentPick } from './types'
 import { ChainedArbitrary, FilteredArbitrary, MappedArbitrary, NoArbitrary, UniqueArbitrary } from './internal'
+import { Picker } from './Picker'
 
 export abstract class Arbitrary<A> {
   abstract size(): ArbitrarySize
-
-  mapArbitrarySize(f: (v: number) => ArbitrarySize): ArbitrarySize {
-    const baseSize = this.size()
-    const result = f(baseSize.value)
-    return { value : result.value,
-      type : baseSize.type === 'exact' && result.type === 'exact' ? 'exact' : 'estimated',
-      credibleInterval : result.credibleInterval }
-  }
-
-  pick(): FluentPick<A> | undefined { return undefined }
+  abstract picker(): Picker<A>
 
   sample(sampleSize = 10): FluentPick<A>[] {
-    const result: FluentPick<A>[] = []
-    for (let i = 0; i < sampleSize; i += 1) {
-      const pick = this.pick()
-      if (pick) result.push(pick)
-      else break
-    }
-
-    return result
+    return this.picker().sample(sampleSize)
   }
 
   cornerCases(): FluentPick<A>[] { return [] }

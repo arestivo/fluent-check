@@ -1,7 +1,8 @@
 import { BetaDistribution } from '../statistics'
 import { FluentPick } from './types'
+import { lowerCredibleInterval, mapArbitrarySize, upperCredibleInterval } from './util'
 import { Arbitrary, NoArbitrary, WrappedArbitrary } from './internal'
-import { lowerCredibleInterval, upperCredibleInterval } from './util'
+import { Picker } from './Picker'
 
 export class FilteredArbitrary<A> extends WrappedArbitrary<A> {
   sizeEstimation: BetaDistribution
@@ -16,21 +17,24 @@ export class FilteredArbitrary<A> extends WrappedArbitrary<A> {
     // Also, this assumes we estimate a continuous interval between 0 and 1;
     // We could try to change this to a beta-binomial distribution, which would provide us a discrete approach
     // for when we know the exact base population size.
-    return this.baseArbitrary.mapArbitrarySize(v =>
+    return mapArbitrarySize(this.baseArbitrary.size(), v =>
       ({ type: 'estimated',
         value: Math.round(v * this.sizeEstimation.mode()),
         credibleInterval: [v * this.sizeEstimation.inv(lowerCredibleInterval), v * this.sizeEstimation.inv(upperCredibleInterval)] }))
   }
 
-  pick(): FluentPick<A> | undefined {
-    do {
-      const pick = this.baseArbitrary.pick()
-      if (!pick) break // TODO: update size estimation accordingly
-      if (this.f(pick.value)) { this.sizeEstimation.alpha += 1; return pick }
-      this.sizeEstimation.beta += 1
-    } while (this.baseArbitrary.size().value * this.sizeEstimation.inv(upperCredibleInterval) >= 1) // If we have a pretty good confidence that the size < 1, we stop trying
+  picker(): Picker<A> {
+    return new Picker(() => {
+      do {
+        // TODO: improve estimation based on whether the picker is indexed or not
+        const pick = this.baseArbitrary.picker().pick()
+        if (!pick) break // TODO: update size estimation accordingly
+        if (this.f(pick.value)) { this.sizeEstimation.alpha += 1; return pick }
+        this.sizeEstimation.beta += 1
+      } while (this.baseArbitrary.size().value * this.sizeEstimation.inv(upperCredibleInterval) >= 1) // If we have a pretty good confidence that the size < 1, we stop trying
 
-    return undefined
+      return undefined
+    })
   }
 
   cornerCases() { return this.baseArbitrary.cornerCases().filter(a => this.f(a.value)) }

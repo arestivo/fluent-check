@@ -1,6 +1,7 @@
 import * as fc from '../src/index'
 import { it } from 'mocha'
 import { expect } from 'chai'
+import { FluentCheck } from '../src/FluentCheck'
 
 describe('Arbitrary tests', () => {
   it('should return has many numbers has asked', () => {
@@ -75,6 +76,25 @@ describe('Arbitrary tests', () => {
 
     it('should return the corner cases of maps', () => {
       expect(fc.integer(0, 1).map(i => i === 0).cornerCases().map(c => c.value)).to.have.members([false, true])
+    })
+  })
+
+  describe('Indexed Pickers', () => {
+    const generate = <A>(n: number, alphabet: Iterable<A>): A[][] =>
+      !n ? [[]] : [...alphabet].flatMap(c => generate(n - 1, alphabet).map(arr => { arr.push(c); return arr }))
+
+    it('should have an indexed picker for appropriate arbitraries', () => {
+      expect(fc.integer(0, 49).sample(1000).map(v => v.value)).to.have.members([...Array(50).keys()])
+      expect(fc.boolean().sample(1000).map(v => v.value)).to.have.members([true, false])
+      expect(fc.array(fc.boolean(), 3, 4).sample(1000).map(v => v.value)).to.have.deep.members([
+        ...generate(3, [true, false]), ...generate(4, [true, false])
+      ])
+      expect(fc.string(2, 3, 'abc').sample(1000).map(v => v.value)).to.have.members([
+        ...generate(2, 'abc').map(a => a.join('')), ...generate(3, 'abc').map(a => a.join(''))
+      ])
+      expect(fc.union<any>(fc.boolean(), fc.integer(1, 3), fc.constant(null)).sample(1000).map(v => v.value)).to.have.members([
+        true, false, 1, 2, 3, null
+      ])
     })
   })
 
@@ -221,7 +241,7 @@ describe('Arbitrary tests', () => {
   describe('Chained Arbitraries', () => {
     it('should allow the creation of array with size based on an integer arbitrary', () => {
       expect(
-        fc.integer(2, 2).chain(i => fc.array(fc.constant(i), i, i)).pick()!.value
+        fc.integer(2, 2).chain(i => fc.array(fc.constant(i), i, i)).picker().pick()!.value
       ).to.have.members([2, 2])
     })
 

@@ -2,6 +2,7 @@ import { FluentPick } from './types'
 import { mapArbitrarySize } from './util'
 import { Arbitrary } from './internal'
 import * as fc from './index'
+import { IndexedPicker, Picker } from './Picker'
 
 export class ArbitraryArray<A> extends Arbitrary<A[]> {
   constructor(public arbitrary: Arbitrary<A>, public min = 0, public max = 10) {
@@ -19,16 +20,37 @@ export class ArbitraryArray<A> extends Arbitrary<A[]> {
     }))
   }
 
-  pick(): FluentPick<A[]> | undefined {
-    const size = Math.floor(Math.random() * (this.max - this.min + 1)) + this.min
-    const fpa = this.arbitrary.sampleWithBias(size)
+  picker(): Picker<A[]> {
+    const basePicker = this.arbitrary.picker()
+    const sequencePicks = (picks: FluentPick<A>[]): FluentPick<A[]> => {
+      const value = picks.map(v => v.value)
+      const original = picks.map(v => v.original)
+      return {
+        value,
+        original: original.every(o => o === undefined) ? value : original
+      }
+    }
 
-    const value = fpa.map(v => v.value)
-    const original = fpa.map(v => v.original)
-
-    return {
-      value,
-      original: original.every(o => o === undefined) ? value : original
+    // TODO: use weighted sampling in IndexedPicker
+    if (basePicker instanceof IndexedPicker) {
+      return new IndexedPicker(this.size().value, idx => {
+        let curr = this.size().value, sz = this.max + 1
+        while (idx < curr) {
+          sz--
+          curr -= basePicker.size ** sz
+        }
+        const res: FluentPick<A>[] = []
+        for (let i = 0; i < sz; i++) {
+          res.push(basePicker.pickWithIndex(idx % basePicker.size))
+          idx = Math.floor(idx / basePicker.size)
+        }
+        return sequencePicks(res)
+      })
+    } else {
+      return new Picker(() => {
+        const size = Math.floor(Math.random() * (this.max - this.min + 1)) + this.min
+        return sequencePicks(this.arbitrary.sampleWithBias(size))
+      })
     }
   }
 
